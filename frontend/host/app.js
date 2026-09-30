@@ -28,8 +28,11 @@ let currentManifestData = null;
 let currentLineIndex = 0;
 let videoStopTimeout = null;
 
+// Character Role Selection State
+let roleAssignments = {}; // e.g. { "Северус Снейп": "Данил", "Гарри Поттер": null }
+let roleToPlayerMap = {}; // Final mapping used during recording
+
 function switchState(stateName) {
-    // If preview modal was open, close and pause it when switching states
     closePreview();
     Object.values(ui.states).forEach(el => el.classList.add('hidden'));
     ui.states[stateName].classList.remove('hidden');
@@ -70,7 +73,6 @@ function closePreview() {
 if (btnClosePreview) btnClosePreview.addEventListener('click', closePreview);
 if (btnModalCloseFooter) btnModalCloseFooter.addEventListener('click', closePreview);
 
-// Close on backdrop click
 if (previewModal) {
     previewModal.addEventListener('click', (e) => {
         if (e.target === previewModal) closePreview();
@@ -105,7 +107,6 @@ async function loadScenesCatalog() {
         const res = await fetch('/api/media/manifests');
         const manifests = await res.json();
         
-        // Filter out dummy/test manifests
         availableScenes = manifests.filter(m => m.video_filename && !m.video_filename.includes('dummy'));
         
         if (availableScenes.length === 0) {
@@ -119,7 +120,6 @@ async function loadScenesCatalog() {
 
         renderScenesGrid();
 
-        // Default: select first scene or keep current if it still exists
         const toSelect = availableScenes.find(s => s.manifest_filename === currentManifest) || availableScenes[0];
         if (toSelect) {
             selectSceneByManifest(toSelect.manifest_filename);
@@ -150,7 +150,6 @@ function renderScenesGrid() {
             </div>` : ''}
 
             <div>
-                <!-- Top Badges -->
                 <div class="flex items-center justify-between gap-2 mb-3">
                     <span class="text-xs font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full flex items-center gap-1">
                         <span>⏱️</span> ${durationSec} сек
@@ -160,12 +159,10 @@ function renderScenesGrid() {
                     </span>
                 </div>
 
-                <!-- Title -->
                 <h3 class="text-lg font-black text-white group-hover:text-purple-300 transition-colors mb-2 line-clamp-2 leading-snug">
                     ${scene.title}
                 </h3>
 
-                <!-- Characters -->
                 <div class="flex flex-wrap gap-1.5 mb-4">
                     ${characters.map(c => `
                         <span class="text-[11px] font-bold bg-slate-800/90 text-slate-300 border border-white/10 px-2 py-0.5 rounded-lg">
@@ -175,7 +172,6 @@ function renderScenesGrid() {
                 </div>
             </div>
 
-            <!-- Action buttons -->
             <div class="flex items-center gap-2 pt-3 border-t border-white/5 mt-2">
                 <button class="btn-card-preview flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-bold rounded-xl border border-white/10 transition-all flex items-center justify-center gap-1.5 shadow-sm" data-manifest="${scene.manifest_filename}">
                     <span>👁️</span> Смотреть
@@ -187,7 +183,6 @@ function renderScenesGrid() {
         </div>`;
     }).join('');
 
-    // Wire clicks on cards and buttons
     scenesContainer.querySelectorAll('.scene-card').forEach(card => {
         const manifest = card.getAttribute('data-manifest');
         
@@ -216,7 +211,6 @@ function selectSceneByManifest(manifestFilename) {
     selectedScene = scene;
     currentManifest = manifestFilename;
 
-    // Update buttons and titles
     ui.createBtn.disabled = false;
     ui.createBtn.classList.remove('opacity-50', 'cursor-not-allowed');
     ui.createBtn.innerHTML = `<span>🚀</span> Создать комнату: "${scene.title}"`;
@@ -227,7 +221,6 @@ function selectSceneByManifest(manifestFilename) {
     renderScenesGrid();
 }
 
-// Initial load of catalog
 loadScenesCatalog();
 
 // --- Video Upload Handler ---
@@ -281,58 +274,128 @@ if (uploadBtn && fileInput) {
     });
 }
 
-// --- Create Room & Lobby ---
-let roleToPlayerMap = {}; // "Северус Снейп" -> "Игрок 1"
-let playerToRolesMap = {}; // "Игрок 1" -> ["Северус Снейп"]
-
-function assignRoles() {
-    roleToPlayerMap = {};
-    playerToRolesMap = {};
-    if (!currentManifestData || !currentManifestData.lines || players.length === 0) return;
-
-    // Get unique characters in order
-    let uniqueRoles = [];
-    if (currentManifestData.characters && currentManifestData.characters.length > 0) {
-        uniqueRoles = [...currentManifestData.characters];
-    } else {
-        currentManifestData.lines.forEach(line => {
-            const r = line.role_name || (line.speaker === "SPEAKER_01" ? "Гарри Поттер" : "Северус Снейп");
-            if (!uniqueRoles.includes(r)) uniqueRoles.push(r);
-        });
-    }
-
-    // Distribute characters among joined players
-    uniqueRoles.forEach((role, i) => {
-        const assignedPlayer = players[i % players.length];
-        roleToPlayerMap[role] = assignedPlayer;
-        if (!playerToRolesMap[assignedPlayer]) playerToRolesMap[assignedPlayer] = [];
-        playerToRolesMap[assignedPlayer].push(role);
-    });
-
-    // Broadcast assigned roles to phones
-    players.forEach(p => {
-        const roles = playerToRolesMap[p] || ["Зритель"];
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                action: "assign_role",
-                player: p,
-                role: roles.join(", ")
-            }));
+// --- Character Stats & Role Selection Engine ---
+function getSceneCharactersWithStats() {
+    if (!currentManifestData || !currentManifestData.lines) return [];
+    
+    const charStats = {};
+    currentManifestData.lines.forEach(line => {
+        const role = line.role_name || (line.speaker === "SPEAKER_01" ? "Гарри Поттер" : "Северус Снейп");
+        if (!charStats[role]) {
+            charStats[role] = { name: role, linesCount: 0, duration: 0 };
         }
+        charStats[role].linesCount += 1;
+        charStats[role].duration += ((line.end || 0) - (line.start || 0));
+    });
+
+    const totalLines = currentManifestData.lines.length;
+    return Object.values(charStats).map(c => ({
+        name: c.name,
+        linesCount: c.linesCount,
+        percent: totalLines > 0 ? Math.round((c.linesCount / totalLines) * 100) : 0,
+        durationSec: Math.round(c.duration)
+    }));
+}
+
+function initRoomRoles() {
+    roleAssignments = {};
+    const chars = getSceneCharactersWithStats();
+    chars.forEach(c => {
+        roleAssignments[c.name] = null;
     });
 }
 
-function getTargetPlayerForLine(line, index) {
-    const role = line.role_name || (line.speaker === "SPEAKER_01" ? "Гарри Поттер" : "Северус Снейп");
-    if (roleToPlayerMap[role]) {
-        return roleToPlayerMap[role];
-    }
-    if (players.length > 0) {
-        return players[index % players.length];
-    }
-    return "Игрок";
+function broadcastRolesUpdate() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+        action: "roles_update",
+        characters: getSceneCharactersWithStats(),
+        assignments: roleAssignments,
+        players: players
+    }));
 }
 
+function updateHostLobbyUI() {
+    ui.playerCount.textContent = `(${players.length})`;
+    const rolesContainer = document.getElementById('lobby-roles-container');
+    const playersList = document.getElementById('players-list');
+    const roleHintEl = document.getElementById('lobby-role-hint');
+    const characters = getSceneCharactersWithStats();
+
+    if (players.length === 0) {
+        if (rolesContainer) {
+            rolesContainer.innerHTML = '<p class="text-slate-500 italic text-center my-auto py-8">Ждем подключения игроков по QR-коду...</p>';
+        }
+        if (playersList) playersList.innerHTML = '';
+        ui.startGameBtn.disabled = true;
+        ui.startGameBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        if (roleHintEl) roleHintEl.textContent = "";
+        return;
+    }
+
+    ui.startGameBtn.disabled = false;
+    ui.startGameBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+    // Render Character Roles List with assigned players
+    if (rolesContainer) {
+        rolesContainer.innerHTML = characters.map(char => {
+            const assignedPlayer = roleAssignments[char.name];
+            const linesWord = char.linesCount === 1 ? 'реплика' : (char.linesCount < 5 ? 'реплики' : 'реплик');
+
+            return `
+            <div class="bg-slate-800/80 p-3 rounded-2xl border ${assignedPlayer ? 'border-emerald-500/30 bg-slate-800/95' : 'border-white/10'} flex items-center justify-between transition-all shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/25 flex items-center justify-center text-lg">
+                        🎭
+                    </div>
+                    <div class="flex flex-col text-left">
+                        <span class="font-black text-white text-sm leading-tight">${char.name}</span>
+                        <span class="text-[11px] text-purple-300 font-semibold mt-0.5">
+                            ${char.linesCount} ${linesWord} (${char.percent}%)
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    ${assignedPlayer ? `
+                        <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm">
+                            <span>👤</span> ${assignedPlayer}
+                        </span>
+                    ` : `
+                        <span class="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-semibold animate-pulse flex items-center gap-1">
+                            <span>⏳</span> Выберите на телефоне
+                        </span>
+                    `}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Render Connected Players chips
+    if (playersList) {
+        playersList.innerHTML = `<span class="text-slate-400 font-medium mr-1">Подключены:</span>` + players.map(p => {
+            const pRoles = Object.entries(roleAssignments).filter(([r, pl]) => pl === p).map(([r]) => r);
+            const roleText = pRoles.length > 0 ? pRoles.join(', ') : 'выбирает роль...';
+            return `
+            <span class="bg-slate-800/90 border border-white/10 text-slate-200 px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                <span>👤</span> <b>${p}</b> <span class="text-purple-400 text-[11px]">(${roleText})</span>
+            </span>`;
+        }).join('');
+    }
+
+    // Dynamic Role Hint
+    if (roleHintEl) {
+        const unassigned = characters.filter(c => !roleAssignments[c.name]);
+        if (players.length === 1 && characters.length > 1 && unassigned.length > 0) {
+            roleHintEl.innerHTML = `💡 В сцене ${characters.length} роли. Вы можете выбрать одну роль или нажать «Озвучить всех» на телефоне!`;
+        } else if (unassigned.length > 0) {
+            roleHintEl.innerHTML = `💡 Еще не все роли заняты (${unassigned.map(c => c.name).join(', ')}). Игроки могут выбрать их на смартфонах.`;
+        } else {
+            roleHintEl.innerHTML = `🎉 Все роли распределены! Можно начинать озвучку.`;
+        }
+    }
+}
+
+// --- Create Room & Join ---
 ui.createBtn.addEventListener('click', async () => {
     try {
         const res = await fetch(`/api/game/create?manifest_filename=${encodeURIComponent(currentManifest)}`, { method: 'POST' });
@@ -340,7 +403,6 @@ ui.createBtn.addEventListener('click', async () => {
         
         currentRoom = data.room_code;
         
-        // Immediately fetch the manifest for room state
         const roomRes = await fetch(`/api/game/${currentRoom}`);
         const roomData = await roomRes.json();
         currentManifestData = roomData.manifest;
@@ -353,9 +415,11 @@ ui.createBtn.addEventListener('click', async () => {
             lobbyTitle.textContent = (selectedScene && selectedScene.title) ? selectedScene.title : (currentManifestData.title || currentManifest);
         }
         
+        initRoomRoles();
         generateQRCode();
         switchState('lobby');
         connectWebSocket();
+        updateHostLobbyUI();
         
     } catch (e) {
         alert("Ошибка создания комнаты: " + e.message);
@@ -410,16 +474,57 @@ function handleServerEvent(msg) {
     if (action === "player_joined" && msg.player !== "HOST") {
         if (!players.includes(msg.player)) {
             players.push(msg.player);
-            assignRoles();
-            updatePlayersUI();
+            
+            // Auto-assign first free character if available, but let them change anytime
+            const freeRole = Object.keys(roleAssignments).find(r => !roleAssignments[r]);
+            if (freeRole) {
+                roleAssignments[freeRole] = msg.player;
+            }
+            
+            updateHostLobbyUI();
+            broadcastRolesUpdate();
         }
     }
     
     // Player left
     if (action === "player_left" && msg.player !== "HOST") {
         players = players.filter(p => p !== msg.player);
-        assignRoles();
-        updatePlayersUI();
+        Object.keys(roleAssignments).forEach(r => {
+            if (roleAssignments[r] === msg.player) {
+                roleAssignments[r] = null;
+            }
+        });
+        updateHostLobbyUI();
+        broadcastRolesUpdate();
+    }
+
+    // Mobile requested role list
+    if (action === "request_roles") {
+        broadcastRolesUpdate();
+    }
+
+    // Player chooses a specific role on smartphone
+    if (action === "choose_role") {
+        const targetPlayer = data.player || msg.player;
+        const targetRole = data.role || msg.role;
+        
+        if (targetRole === "__ALL__") {
+            Object.keys(roleAssignments).forEach(r => {
+                roleAssignments[r] = targetPlayer;
+            });
+        } else {
+            // Unassign previous role for this player
+            Object.keys(roleAssignments).forEach(r => {
+                if (roleAssignments[r] === targetPlayer) {
+                    roleAssignments[r] = null;
+                }
+            });
+            // Assign new role
+            roleAssignments[targetRole] = targetPlayer;
+        }
+
+        updateHostLobbyUI();
+        broadcastRolesUpdate();
     }
 
     // Player ready
@@ -448,45 +553,6 @@ function handleServerEvent(msg) {
     }
 }
 
-function updatePlayersUI() {
-    ui.playerCount.textContent = `(${players.length})`;
-    const roleHintEl = document.getElementById('lobby-role-hint');
-    
-    if (players.length === 0) {
-        ui.playersList.innerHTML = '<p class="text-slate-500 italic text-center my-auto">Ждем подключения игроков по QR-коду...</p>';
-        ui.startGameBtn.disabled = true;
-        ui.startGameBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        if (roleHintEl) roleHintEl.textContent = "";
-    } else {
-        ui.playersList.innerHTML = players.map(p => {
-            const roles = (playerToRolesMap[p] && playerToRolesMap[p].length > 0) ? playerToRolesMap[p].join(", ") : "Ожидание...";
-            return `
-            <div class="bg-slate-800/80 p-3.5 rounded-2xl font-bold border border-white/10 flex justify-between items-center transition-all shadow-sm">
-                <div class="flex flex-col text-left">
-                    <span class="text-white text-base">👤 ${p}</span>
-                    <span class="text-purple-400 text-xs font-semibold">🎭 Роль: ${roles}</span>
-                </div>
-                <span class="text-emerald-400 text-xs font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">В игре</span>
-            </div>`;
-        }).join('');
-        
-        ui.startGameBtn.disabled = false;
-        ui.startGameBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-
-        // Dynamic Role Hint
-        if (roleHintEl && currentManifestData) {
-            const chars = currentManifestData.characters || ["Персонаж 1", "Персонаж 2"];
-            if (players.length === 1 && chars.length > 1) {
-                roleHintEl.innerHTML = `💡 В сцене ${chars.length} роли (${chars.join(', ')}). Подключите 2-й смартфон, чтобы разделить персонажей! Сейчас вы озвучите всех.`;
-            } else if (players.length >= chars.length && chars.length > 0) {
-                roleHintEl.innerHTML = `🎉 Отлично! Все роли распределены между игроками.`;
-            } else {
-                roleHintEl.innerHTML = "";
-            }
-        }
-    }
-}
-
 // --- Start Game (Cinema & Recording) ---
 ui.startGameBtn.addEventListener('click', async () => {
     switchState('cinema');
@@ -502,12 +568,34 @@ ui.startGameBtn.addEventListener('click', async () => {
             return;
         }
 
-        assignRoles();
+        // Finalize Roles: assign any unassigned characters
+        const characters = getSceneCharactersWithStats();
+        characters.forEach((char, i) => {
+            if (!roleAssignments[char.name]) {
+                if (players.length === 1) {
+                    // Solo player takes all remaining roles for full dubbing
+                    roleAssignments[char.name] = players[0];
+                } else if (players.length > 0) {
+                    // Find player with least roles or round-robin
+                    roleAssignments[char.name] = players[i % players.length];
+                }
+            }
+        });
+
+        roleToPlayerMap = { ...roleAssignments };
+
+        // Broadcast final role assignment
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                action: "roles_finalized",
+                roleAssignments: roleToPlayerMap
+            }));
+        }
 
         const videoUrl = `/media/movies/${encodeURIComponent(currentManifestData.video_filename)}`;
         ui.video.src = videoUrl;
         ui.video.load();
-        ui.video.muted = true; // Muted on host TV during recording to prevent mic echo
+        ui.video.muted = true; // Muted on TV during recording to prevent echo
         
         currentLineIndex = 0;
         presentLine(0);
@@ -517,6 +605,17 @@ ui.startGameBtn.addEventListener('click', async () => {
         switchState('setup');
     }
 });
+
+function getTargetPlayerForLine(line, index) {
+    const role = line.role_name || (line.speaker === "SPEAKER_01" ? "Гарри Поттер" : "Северус Снейп");
+    if (roleToPlayerMap[role]) {
+        return roleToPlayerMap[role];
+    }
+    if (players.length > 0) {
+        return players[index % players.length];
+    }
+    return null;
+}
 
 function presentLine(index) {
     if (!currentManifestData || index >= currentManifestData.lines.length) return;
@@ -528,6 +627,12 @@ function presentLine(index) {
     const durationMs = Math.round((line.end - line.start) * 1000);
     const startMs = Math.round(line.start * 1000);
 
+    // If role has no player assigned, play original movie dialogue
+    if (!targetPlayer) {
+        presentUnassignedOriginalLine(line, index);
+        return;
+    }
+
     // Update TV Overlay
     document.getElementById('line-progress-badge').textContent = `Фраза ${index + 1} из ${currentManifestData.lines.length}`;
     document.getElementById('host-acting-cue').textContent = line.acting_cue || "";
@@ -536,6 +641,7 @@ function presentLine(index) {
     document.getElementById('host-instruction').textContent = `⏳ Ждем, пока ${targetPlayer} (${role}) нажмет «Я ГОТОВ» на телефоне...`;
 
     // Position video to start of dialogue
+    ui.video.muted = true;
     ui.video.pause();
     ui.video.currentTime = Math.max(0, line.start - 0.2);
 
@@ -551,6 +657,41 @@ function presentLine(index) {
         duration_ms: durationMs,
         start_ms: startMs
     }));
+}
+
+function presentUnassignedOriginalLine(line, index) {
+    const role = line.role_name || "Персонаж";
+    const durationMs = Math.round((line.end - line.start) * 1000);
+
+    document.getElementById('line-progress-badge').textContent = `Фраза ${index + 1} из ${currentManifestData.lines.length}`;
+    document.getElementById('host-acting-cue').textContent = "Оригинальная реплика фильма";
+    ui.speakerDisplay.innerHTML = `🎬 В кадре: <span class="text-amber-400 font-bold">${role} (Оригинал)</span>`;
+    ui.lineDisplay.textContent = `"${line.clean_text || line.text}"`;
+    document.getElementById('host-instruction').textContent = `🔊 Звучит оригинальный голос из фильма...`;
+
+    // Play video with audio enabled for original line
+    ui.video.muted = false;
+    ui.video.currentTime = line.start;
+    ui.video.play().catch(e => console.log("Play error:", e));
+
+    ws.send(JSON.stringify({
+        action: "prepare_original_line",
+        line_index: index,
+        role_name: role,
+        text: line.clean_text || line.text
+    }));
+
+    if (videoStopTimeout) clearTimeout(videoStopTimeout);
+    videoStopTimeout = setTimeout(() => {
+        ui.video.pause();
+        ui.video.muted = true;
+        currentLineIndex++;
+        if (currentLineIndex < currentManifestData.lines.length) {
+            presentLine(currentLineIndex);
+        } else {
+            finishAndMix();
+        }
+    }, durationMs + 600);
 }
 
 function runHostCountdown(callback) {
@@ -581,7 +722,8 @@ function startLineRecording(index) {
     
     document.getElementById('host-instruction').textContent = `🔴 Идет запись голоса... Говорит ${targetPlayer} (${role})!`;
 
-    // Play video during line
+    // Play video muted during recording so player mic doesn't catch echo
+    ui.video.muted = true;
     ui.video.currentTime = line.start;
     ui.video.play().catch(e => console.log("Video play prevented:", e));
 
@@ -656,6 +798,7 @@ const btnBackLobby = document.getElementById('btn-back-lobby');
 if (btnBackLobby) {
     btnBackLobby.addEventListener('click', () => {
         switchState('lobby');
+        updateHostLobbyUI();
     });
 }
 

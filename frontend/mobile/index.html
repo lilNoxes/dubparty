@@ -62,23 +62,44 @@
             <p id="join-error" class="text-red-400 text-xs font-semibold hidden"></p>
         </div>
 
-        <!-- STATE 2: LOBBY (WAITING) -->
-        <div id="lobby-state" class="w-full flex flex-col items-center gap-4 text-center hidden my-auto">
-            <div class="bg-slate-900/80 backdrop-blur-xl p-6 rounded-3xl w-full border border-white/10 shadow-2xl">
-                <span class="text-xs uppercase tracking-widest font-bold text-slate-400">Комната</span>
-                <h2 class="text-3xl sm:text-4xl font-mono font-black text-purple-400 tracking-wider my-1.5" id="lobby-room-code">----</h2>
+        <!-- STATE 2: LOBBY (ROLE SELECTION & WAITING) -->
+        <div id="lobby-state" class="w-full h-full flex flex-col justify-between items-center text-center hidden py-1 gap-2.5 overflow-hidden">
+            <!-- Top Room & Role Summary -->
+            <div class="w-full bg-slate-900/85 backdrop-blur-xl p-3.5 rounded-3xl border border-white/10 shadow-xl shrink-0">
+                <div class="flex items-center justify-between mb-1.5 px-1">
+                    <span class="text-xs uppercase tracking-widest font-bold text-slate-400">Комната: <span id="lobby-room-code" class="text-purple-400 font-mono font-black">----</span></span>
+                    <span id="player-badge" class="text-xs font-bold text-slate-300 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/10">👤 Игрок</span>
+                </div>
                 
-                <div class="h-px bg-white/10 my-3.5"></div>
-                
-                <p class="text-xs text-slate-400 mb-0.5">Твоя роль в сцене:</p>
-                <h3 id="player-role" class="text-xl sm:text-2xl font-black text-emerald-400 mb-1.5 break-words">Ожидание...</h3>
-                <p class="text-[11px] text-slate-500">Ждем, когда хост запустит сцену на ТВ.</p>
+                <div class="bg-slate-800/80 rounded-2xl p-2.5 border border-white/5 flex items-center justify-between">
+                    <span class="text-xs text-slate-400 font-medium">Твоя роль:</span>
+                    <span id="player-role" class="text-sm sm:text-base font-black text-amber-400 truncate max-w-[200px]">Не выбрана</span>
+                </div>
             </div>
-            
-            <!-- Test Mic Button -->
-            <button id="test-mic-btn" class="w-full py-3 px-4 bg-slate-900/60 hover:bg-slate-800 border border-white/10 rounded-2xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2 shadow-sm">
-                <span>🎤</span> Разрешить доступ к микрофону
-            </button>
+
+            <!-- Middle: Role Selection Cards Container -->
+            <div class="w-full flex-grow flex flex-col justify-center min-h-[160px] max-h-[48vh] overflow-hidden">
+                <div class="flex items-center justify-between mb-1.5 px-1 shrink-0">
+                    <span class="text-xs uppercase tracking-wider font-extrabold text-purple-400">🎭 Выбери своего персонажа:</span>
+                    <span class="text-[10px] text-slate-500 font-semibold">Нажми на карточку</span>
+                </div>
+
+                <div id="character-selection-list" class="w-full flex flex-col gap-2 overflow-y-auto max-h-full pr-1">
+                    <p class="text-slate-500 text-xs italic py-4">Загрузка доступных персонажей...</p>
+                </div>
+
+                <!-- Solo / Voice All Button -->
+                <button id="btn-voice-all" class="mt-2 w-full py-2.5 px-3 bg-slate-900/60 hover:bg-slate-800 border border-purple-500/20 hover:border-purple-500/50 rounded-2xl text-xs font-bold text-purple-300 flex items-center justify-center gap-1.5 transition-all shadow-sm shrink-0">
+                    <span>🌟</span> Озвучить всех персонажей (Соло)
+                </button>
+            </div>
+
+            <!-- Bottom: Test Mic Button -->
+            <div class="w-full shrink-0 pb-1 safe-bottom">
+                <button id="test-mic-btn" class="w-full py-3 px-4 bg-slate-900/60 hover:bg-slate-800 border border-white/10 rounded-2xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2 shadow-sm">
+                    <span>🎤</span> Проверить микрофон
+                </button>
+            </div>
         </div>
 
         <!-- STATE 3: RECORDING -->
