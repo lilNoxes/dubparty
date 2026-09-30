@@ -108,10 +108,40 @@ async def upload_video(background_tasks: BackgroundTasks, file: UploadFile = Fil
 
 @router.get("/manifests")
 def list_manifests():
-    """Lists all processed videos and their manifests."""
+    """Lists all processed videos and their manifests with full metadata for the scene library."""
     manifests = []
-    for f in os.listdir(MOVIES_DIR):
-        if f.endswith("_manifest.json"):
-            with open(os.path.join(MOVIES_DIR, f), "r", encoding="utf-8") as mf:
-                manifests.append(json.load(mf))
+    if os.path.exists(MOVIES_DIR):
+        for f in os.listdir(MOVIES_DIR):
+            if f.endswith("_manifest.json") or (f.endswith(".json") and f != "demo.json"):
+                try:
+                    with open(os.path.join(MOVIES_DIR, f), "r", encoding="utf-8") as mf:
+                        data = json.load(mf)
+                        data["manifest_filename"] = f
+                        
+                        # Infer unique characters if not explicitly defined
+                        if "characters" not in data or not data["characters"]:
+                            chars = []
+                            for line in data.get("lines", []):
+                                r = line.get("role_name", "Персонаж")
+                                if r not in chars:
+                                    chars.append(r)
+                            data["characters"] = chars
+                            
+                        # Infer duration in seconds
+                        lines = data.get("lines", [])
+                        data["lines_count"] = len(lines)
+                        if lines:
+                            data["duration_sec"] = round(max(l.get("end", 0) for l in lines))
+                        else:
+                            data["duration_sec"] = 0
+                            
+                        # Human-readable title
+                        video_fn = data.get("video_filename", f)
+                        clean_title = video_fn.rsplit(".", 1)[0].replace("_cut", "").replace("[720p]", "").replace("[1080p]", "").strip()
+                        data["title"] = clean_title
+                        data["video_url"] = f"/media/movies/{video_fn}"
+                        
+                        manifests.append(data)
+                except Exception as e:
+                    print(f"Error loading manifest {f}: {e}")
     return manifests

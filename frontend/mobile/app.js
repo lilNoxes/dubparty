@@ -158,15 +158,18 @@ function handleServerEvent(msg) {
 
     // Countdown signal from host
     if (action === "do_countdown") {
-        if (activeLine && activeLine.player === playerName) {
+        const isMyTurn = (data.player ? data.player === playerName : (activeLine && activeLine.player === playerName));
+        if (isMyTurn) {
             runMobileCountdown();
         }
     }
 
     // Recording start signal
     if (action === "start_recording") {
-        if (activeLine && activeLine.player === playerName) {
-            startRecordingActiveLine(activeLine.line_index, activeLine.duration_ms, activeLine.start_ms);
+        const isMyTurn = (data.player ? data.player === playerName : (activeLine && activeLine.player === playerName));
+        if (isMyTurn && activeLine) {
+            const durationMs = data.duration_ms || activeLine.duration_ms;
+            startRecordingActiveLine(activeLine.line_index, durationMs, activeLine.start_ms);
         }
     }
 }
