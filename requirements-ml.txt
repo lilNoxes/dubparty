@@ -1,0 +1,7 @@
+# Local ML dependencies for GPU processing on laptop (RTX 3060)
+torch==2.2.1
+torchaudio==2.2.1
+faster-whisper
+pyannote.audio
+google-genai==0.3.0
+soundfile

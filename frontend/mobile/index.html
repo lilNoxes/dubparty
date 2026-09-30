@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DubParty - Контроллер игрока</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; touch-action: manipulation; }
+        @keyframes pulse-red {
+            0% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.02); box-shadow: 0 0 0 25px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .recording-animation { animation: pulse-red 1.3s infinite; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col relative selection:bg-purple-500 selection:text-white">
+
+    <!-- Ambient background lights -->
+    <div class="absolute -top-32 -left-32 w-64 h-64 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-pink-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- HEADER -->
+    <header class="bg-slate-900/60 backdrop-blur-md px-6 py-4 border-b border-white/5 flex justify-between items-center shrink-0 z-10">
+        <div class="flex items-center gap-2">
+            <span class="text-xl">🎙️</span>
+            <h1 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 tracking-tight">DubParty</h1>
+        </div>
+        <div class="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1 rounded-full text-xs font-semibold text-slate-300">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Онлайн</span>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-grow flex flex-col items-center justify-center p-5 z-10">
+        
+        <!-- STATE 1: JOIN ROOM -->
+        <div id="join-state" class="w-full max-w-sm flex flex-col gap-4 text-center bg-slate-900/80 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl">
+            <div class="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-2xl mx-auto mb-1">
+                🎮
+            </div>
+            <h2 class="text-2xl font-black text-white">Вход в игру</h2>
+            <p class="text-slate-400 text-xs -mt-2">Введи 4-значный код комнаты с экрана телевизора</p>
+            
+            <input type="text" id="room-code-input" placeholder="КОД КОМНАТЫ" maxlength="6" class="w-full p-4 text-center text-3xl font-black bg-slate-800/80 border border-white/10 rounded-2xl uppercase tracking-widest text-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-inner">
+            <input type="text" id="player-name-input" placeholder="Твое имя или никнейм" maxlength="15" class="w-full p-4 text-center text-base font-bold bg-slate-800/80 border border-white/10 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+            
+            <button id="join-btn" class="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-black text-lg rounded-2xl transition-all shadow-lg shadow-purple-600/30 active:scale-95 text-white">
+                Войти в комнату
+            </button>
+            <p id="join-error" class="text-red-400 text-xs font-semibold hidden"></p>
+        </div>
+
+        <!-- STATE 2: LOBBY (WAITING) -->
+        <div id="lobby-state" class="w-full max-w-sm flex flex-col items-center gap-5 text-center hidden">
+            <div class="bg-slate-900/80 backdrop-blur-xl p-7 rounded-3xl w-full border border-white/10 shadow-2xl">
+                <span class="text-xs uppercase tracking-widest font-bold text-slate-400">Комната</span>
+                <h2 class="text-4xl font-mono font-black text-purple-400 tracking-wider my-2" id="lobby-room-code">----</h2>
+                
+                <div class="h-px bg-white/10 my-4"></div>
+                
+                <p class="text-xs text-slate-400 mb-1">Твоя роль в сцене:</p>
+                <h3 id="player-role" class="text-2xl font-black text-emerald-400 mb-2">Ожидание...</h3>
+                <p class="text-xs text-slate-500">Ждем, когда хост запустит сцену на главном экране.</p>
+            </div>
+            
+            <!-- Test Mic Button to ensure permission is granted before game starts -->
+            <button id="test-mic-btn" class="w-full py-3.5 px-4 bg-slate-900/60 hover:bg-slate-800 border border-white/10 rounded-2xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2 shadow-sm">
+                <span>🎤</span> Разрешить доступ к микрофону
+            </button>
+        </div>
+
+        <!-- STATE 3: RECORDING -->
+        <div id="recording-state" class="w-full max-w-sm flex flex-col items-center text-center hidden h-full justify-between py-6">
+            <!-- Teleprompter Card -->
+            <div class="w-full">
+                <div class="flex justify-between items-center mb-2 px-1">
+                    <span id="mobile-line-progress" class="text-purple-400 text-xs font-black uppercase tracking-wider">Фраза 1/5</span>
+                    <span id="mobile-character-badge" class="bg-white/5 text-emerald-400 text-xs px-3 py-1 rounded-full font-bold border border-white/10">Роль</span>
+                </div>
+                
+                <div class="px-5 py-6 bg-slate-900/90 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col gap-2">
+                    <span id="acting-cue-text" class="text-yellow-400 font-bold italic text-sm"></span>
+                    <span id="teleprompter-text" class="text-2xl font-black text-white leading-snug">"Приготовься..."</span>
+                </div>
+            </div>
+            
+            <!-- Controls / Interaction Area -->
+            <div class="w-full flex flex-col items-center gap-3">
+                
+                <!-- When NOT my turn -->
+                <div id="not-my-turn-box" class="hidden flex flex-col items-center gap-2 py-4">
+                    <p class="text-slate-400 text-xs uppercase tracking-wider font-bold">Сейчас говорит:</p>
+                    <p id="active-speaker-name" class="text-3xl font-black text-purple-400">Игрок</p>
+                    <p class="text-xs text-slate-500 mt-1">Смотри на экран телевизора и слушай! 🍿</p>
+                </div>
+
+                <!-- When MY turn -->
+                <div id="my-turn-box" class="w-full flex flex-col items-center">
+                    
+                    <!-- 1. Player triggers countdown when ready -->
+                    <button id="ready-btn" class="w-full py-5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 font-black text-2xl rounded-2xl shadow-xl transition-all active:scale-95 text-white flex items-center justify-center gap-3 shadow-emerald-500/30">
+                        <span>🎬</span> Я ГОТОВ!
+                    </button>
+                    
+                    <!-- 2. Countdown display (3, 2, 1) -->
+                    <div id="mobile-countdown" class="hidden text-8xl font-black text-yellow-300 my-4 drop-shadow-[0_0_35px_rgba(250,204,21,0.6)]">
+                        3
+                    </div>
+
+                    <!-- 3. Recording indicator -->
+                    <div id="recording-indicator-box" class="hidden flex flex-col items-center gap-3 w-full">
+                        <div id="mic-button" class="w-24 h-24 rounded-full bg-red-600 flex items-center justify-center recording-animation shadow-2xl shadow-red-600/50">
+                            <svg class="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <p class="text-lg font-black text-red-400 animate-pulse tracking-wide">ГОВОРИ СЕЙЧАС!</p>
+                        
+                        <!-- Progress bar for recording duration -->
+                        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden mt-1 border border-white/10">
+                            <div id="record-progress-bar" class="bg-red-500 h-full w-0"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <p id="take-status-text" class="text-xs text-slate-400 font-medium italic min-h-[1.5rem]"></p>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

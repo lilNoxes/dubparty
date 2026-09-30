@@ -1,0 +1,28 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment variables & secrets (keep tokens private!)
+.env
+.env.local
+
+# Temporary takes and mixed scenes (keep dir structure via .gitkeep)
+storage/takes/*
+!storage/takes/.gitkeep
+storage/scenes/*
+!storage/scenes/.gitkeep
+*_audio.wav
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
