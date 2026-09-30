@@ -32,8 +32,14 @@ app.mount("/host", StaticFiles(directory=os.path.join(FRONTEND_DIR, "host"), htm
 app.mount("/mobile", StaticFiles(directory=os.path.join(FRONTEND_DIR, "mobile"), html=True), name="mobile")
 app.mount("/media", StaticFiles(directory=STORAGE_DIR), name="media")
 
+from fastapi.responses import RedirectResponse
 from app.api.media import router as media_router
 from app.api.game import router as game_router
+
+@app.get("/")
+def root():
+    return RedirectResponse(url="/host/")
+
 app.include_router(media_router, prefix="/api/media", tags=["media"])
 app.include_router(game_router, prefix="/api/game", tags=["game"])
 
