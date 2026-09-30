@@ -3,14 +3,21 @@ import os
 import subprocess
 from typing import List, Dict
 
-try:
-    import static_ffmpeg
-    static_ffmpeg.add_paths()
-except Exception:
-    pass
+_ffmpeg_initialized = False
+
+def ensure_ffmpeg():
+    global _ffmpeg_initialized
+    if not _ffmpeg_initialized:
+        try:
+            import static_ffmpeg
+            static_ffmpeg.add_paths()
+        except Exception as e:
+            print(f"[FFmpeg] static_ffmpeg init note: {e}")
+        _ffmpeg_initialized = True
 
 async def run_ffmpeg(args: List[str]):
     """Helper to run FFmpeg using subprocess.run in a thread pool for Windows stability."""
+    ensure_ffmpeg()
     cmd = ["ffmpeg"] + args
     print(f"[FFmpeg] Running: {' '.join(cmd)}")
     
