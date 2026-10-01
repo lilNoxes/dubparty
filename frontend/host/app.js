@@ -584,6 +584,12 @@ ui.startGameBtn.addEventListener('click', async () => {
         // Otherwise: respect player choices. Unassigned roles = original audio.
 
         roleToPlayerMap = { ...roleAssignments };
+        
+        console.log("=== GAME START: ROLE ASSIGNMENTS ===");
+        console.log("roleAssignments:", JSON.stringify(roleAssignments));
+        console.log("roleToPlayerMap:", JSON.stringify(roleToPlayerMap));
+        console.log("anyRoleChosen:", anyRoleChosen);
+        console.log("players:", JSON.stringify(players));
 
         // Broadcast final role assignment
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -609,12 +615,12 @@ ui.startGameBtn.addEventListener('click', async () => {
 
 function getTargetPlayerForLine(line, index) {
     const role = line.role_name || (line.speaker === "SPEAKER_01" ? "Гарри Поттер" : "Северус Снейп");
-    if (roleToPlayerMap[role]) {
-        return roleToPlayerMap[role];
+    const mappedPlayer = roleToPlayerMap[role];
+    console.log(`getTargetPlayerForLine[${index}]: role="${role}", mappedPlayer="${mappedPlayer}", roleToPlayerMap=`, JSON.stringify(roleToPlayerMap));
+    if (mappedPlayer) {
+        return mappedPlayer;
     }
-    if (players.length > 0) {
-        return players[index % players.length];
-    }
+    // DO NOT fallback to round-robin — return null so original audio plays
     return null;
 }
 
