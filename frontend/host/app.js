@@ -568,19 +568,20 @@ ui.startGameBtn.addEventListener('click', async () => {
             return;
         }
 
-        // Finalize Roles: assign any unassigned characters
+        // Finalize Roles: DO NOT auto-assign unassigned characters.
+        // If a player chose a specific role, unassigned characters will play
+        // as original movie audio via presentUnassignedOriginalLine().
+        // Only auto-assign if NO player has chosen ANY role yet (fallback).
         const characters = getSceneCharactersWithStats();
-        characters.forEach((char, i) => {
-            if (!roleAssignments[char.name]) {
-                if (players.length === 1) {
-                    // Solo player takes all remaining roles for full dubbing
-                    roleAssignments[char.name] = players[0];
-                } else if (players.length > 0) {
-                    // Find player with least roles or round-robin
-                    roleAssignments[char.name] = players[i % players.length];
-                }
-            }
-        });
+        const anyRoleChosen = Object.values(roleAssignments).some(p => p !== null);
+        
+        if (!anyRoleChosen && players.length > 0) {
+            // Nobody picked anything — round-robin assign so game can proceed
+            characters.forEach((char, i) => {
+                roleAssignments[char.name] = players[i % players.length];
+            });
+        }
+        // Otherwise: respect player choices. Unassigned roles = original audio.
 
         roleToPlayerMap = { ...roleAssignments };
 

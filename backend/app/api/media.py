@@ -145,3 +145,21 @@ def list_manifests():
                 except Exception as e:
                     print(f"Error loading manifest {f}: {e}")
     return manifests
+
+
+from pydantic import BaseModel
+
+class ManifestUpdateData(BaseModel):
+    manifest_filename: str
+    manifest_data: dict
+
+@router.post("/manifests/update")
+def update_manifest(data: ManifestUpdateData):
+    file_path = os.path.join(MOVIES_DIR, data.manifest_filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Manifest not found")
+        
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data.manifest_data, f, indent=2, ensure_ascii=False)
+        
+    return {"status": "success", "message": "Manifest updated successfully"}

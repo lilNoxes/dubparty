@@ -30,6 +30,7 @@ STORAGE_DIR = os.path.join(BASE_DIR, "storage")
 # Mount static files for frontend and storage
 app.mount("/host", StaticFiles(directory=os.path.join(FRONTEND_DIR, "host"), html=True), name="host")
 app.mount("/mobile", StaticFiles(directory=os.path.join(FRONTEND_DIR, "mobile"), html=True), name="mobile")
+app.mount("/admin", StaticFiles(directory=os.path.join(FRONTEND_DIR, "admin"), html=True), name="admin")
 app.mount("/media", StaticFiles(directory=STORAGE_DIR), name="media")
 
 from fastapi.responses import RedirectResponse
